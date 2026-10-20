@@ -23,7 +23,7 @@
 ## ビルドと実行
 
 ```
-git clone <このリポジトリ>
+git clone https://github.com/ichiroji/FontToPng2.git
 cd FontToPng2
 dotnet run --project src/FontToPng2.App
 ```
