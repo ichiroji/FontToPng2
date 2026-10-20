@@ -29,6 +29,8 @@ public sealed class AppSettings
     public bool Antialias { get; set; } = true;
     public bool SkipMissing { get; set; } = true;
     public bool SkipBlank { get; set; } = true;
+    public bool SdfOutput { get; set; } = false;
+    public string SdfSupersample { get; set; } = "4";
 
     // 出力する文字
     /// <summary>チェックを付けたプリセットの名前（CharsetSource.Presets の Name）</summary>

@@ -11,7 +11,8 @@ public readonly record struct ExportResult(int Total, int Written, int Skipped, 
 
 /// <summary>
 /// 出力した文字の一覧(CSV)の設定。
-/// 1行 = "文字コード番号,ファイル名[,1]"（3列目はカラーの字形のときだけ付く）
+/// 1行 = "文字コード番号,ファイル名[,1 | ,2,余白]"
+/// （",1" はカラーの字形、",2,余白" は SDF済み画像のときだけ付く）
 /// </summary>
 public sealed record CsvListOptions
 {
@@ -49,6 +50,7 @@ public static class PngExporter
             }
 
             var g = graphemes[i];
+            // 欠字・空白で飛ばす判定は SDF出力でも Render() で行う
             using (var bmp = renderer.Render(g))
             {
                 if (bmp is null)
@@ -57,17 +59,30 @@ public static class PngExporter
                 }
                 else
                 {
-                    var fileName = CharsetSource.ToFileName(g) + ".png";
-                    using var data = bmp.Encode(SKEncodedImageFormat.Png, 100);
-                    using (var fs = File.Create(Path.Combine(outputDir, fileName)))
-                        data.SaveTo(fs);
-                    written++;
+                    bool color = (csv is not null || options.SdfOutput) && renderer.IsColorGlyph(g);
 
-                    if (csv is not null)
+                    // SDF出力ではカラーの字形だけ通常の画像にする
+                    int sdfPadding = 0;
+                    bool sdfGlyph = options.SdfOutput && !color;
+                    using var sdf = sdfGlyph ? renderer.RenderSdf(g, out sdfPadding) : null;
+                    var image = sdfGlyph ? sdf : bmp;
+                    if (image is null)
                     {
-                        csvLines.Append(CharsetSource.ToCodeString(g)).Append(',').Append(csv.PathPrefix).Append(fileName);
-                        if (renderer.IsColorGlyph(g)) csvLines.Append(",1");
-                        csvLines.Append("\r\n");
+                        skipped++;
+                    }
+                    else
+                    {
+                        var fileName = CharsetSource.ToFileName(g) + ".png";
+                        SavePng(image, Path.Combine(outputDir, fileName));
+                        written++;
+
+                        if (csv is not null)
+                        {
+                            csvLines.Append(CharsetSource.ToCodeString(g)).Append(',').Append(csv.PathPrefix).Append(fileName);
+                            if (color) csvLines.Append(",1");
+                            else if (sdfGlyph) csvLines.Append(",2,").Append(sdfPadding);
+                            csvLines.Append("\r\n");
+                        }
                     }
                 }
             }
@@ -85,5 +100,12 @@ public static class PngExporter
             File.WriteAllText(csvPath, csvLines.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         }
         return new ExportResult(graphemes.Count, written, skipped, canceled, csvPath);
+    }
+
+    private static void SavePng(SKBitmap bmp, string path)
+    {
+        using var data = bmp.Encode(SKEncodedImageFormat.Png, 100);
+        using var fs = File.Create(path);
+        data.SaveTo(fs);
     }
 }

@@ -38,4 +38,13 @@ public sealed record RenderOptions
 
     /// <summary>アンチエイリアス</summary>
     public bool Antialias { get; init; } = true;
+
+    /// <summary>
+    /// true なら SDF済み画像(Yuka2 用。8bitグレースケールの距離値)で出力する。
+    /// カラーの字形は従来どおりの画像になる。仕様: Yuka2/Document/SDF済み画像フォント仕様.md
+    /// </summary>
+    public bool SdfOutput { get; init; } = false;
+
+    /// <summary>SDF済み画像を作るときに文字を何倍の大きさで描くか(1〜8)。大きいほど輪郭がなめらか</summary>
+    public int SdfSupersample { get; init; } = 4;
 }

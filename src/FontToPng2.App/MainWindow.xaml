@@ -59,6 +59,7 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <TextBlock Text="サイズ(px)" Style="{StaticResource Label}"/>
@@ -84,6 +85,18 @@
                             <CheckBox x:Name="SkipMissingCheck" Content="フォントに無い文字は出力しない" IsChecked="True" Margin="0,0,12,0" Click="OnSettingChanged"/>
                             <CheckBox x:Name="SkipBlankCheck" Content="空白になる文字は出力しない（スペース等は除く）" IsChecked="True" Click="OnSettingChanged"/>
                         </WrapPanel>
+                        <StackPanel Grid.Row="5" Grid.ColumnSpan="4" Orientation="Horizontal" Margin="0,6,0,2">
+                            <CheckBox x:Name="SdfCheck" Content="SDFで出力（Yuka2用）" VerticalAlignment="Center" Margin="0,0,12,0" Click="OnSettingChanged"
+                                      ToolTip="距離値のグレースケール画像で出力します（カラーの字形は通常の画像）。文字色・背景・余白・切り抜きの設定は使いません"/>
+                            <TextBlock Text="倍率" Style="{StaticResource Label}"/>
+                            <ComboBox x:Name="SupersampleCombo" Width="50" SelectedIndex="2" SelectionChanged="OnSettingChanged"
+                                      ToolTip="文字を何倍の大きさで描いてから距離値にするか。大きいほど輪郭がなめらかで、時間がかかります">
+                                <ComboBoxItem Content="1"/>
+                                <ComboBoxItem Content="2"/>
+                                <ComboBoxItem Content="4"/>
+                                <ComboBoxItem Content="8"/>
+                            </ComboBox>
+                        </StackPanel>
                     </Grid>
                 </GroupBox>
 
@@ -132,7 +145,7 @@
                             <TextBox x:Name="CsvPrefixBox" Grid.Row="1" Grid.Column="1" Margin="0,2"/>
                         </Grid>
                         <TextBlock Foreground="Gray" Margin="0,4,0,0" TextWrapping="Wrap"
-                                   Text="CSVの1行: 文字コード番号,ファイル名[,1]（1 = カラーの字形）。例: 0x20,FONT\20.png　ファイル名を空にするとCSVは作りません"/>
+                                   Text="CSVの1行: 文字コード番号,ファイル名[,1 | ,2,余白]（1 = カラー、2 = SDF済み）。例: 0x20,FONT\20.png　ファイル名を空にするとCSVは作りません"/>
                     </StackPanel>
                 </GroupBox>
 

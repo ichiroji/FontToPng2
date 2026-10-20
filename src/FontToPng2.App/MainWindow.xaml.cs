@@ -60,6 +60,10 @@ public partial class MainWindow : Window
         AntialiasCheck.IsChecked = s.Antialias;
         SkipMissingCheck.IsChecked = s.SkipMissing;
         SkipBlankCheck.IsChecked = s.SkipBlank;
+        SdfCheck.IsChecked = s.SdfOutput;
+        SupersampleCombo.SelectedItem = SupersampleItems.FirstOrDefault(i => (string)i.Content == s.SdfSupersample.Trim())
+            ?? SupersampleItems.First(i => (string)i.Content == "4");
+        UpdateSdfControls();
 
         SetCheckedPresets(s.CheckedPresets);
         RangeBox.Text = s.Ranges;
@@ -108,6 +112,8 @@ public partial class MainWindow : Window
             Antialias = AntialiasCheck.IsChecked == true,
             SkipMissing = SkipMissingCheck.IsChecked == true,
             SkipBlank = SkipBlankCheck.IsChecked == true,
+            SdfOutput = SdfCheck.IsChecked == true,
+            SdfSupersample = (string)((System.Windows.Controls.ComboBoxItem)SupersampleCombo.SelectedItem).Content,
 
             CheckedPresets = GetCheckedPresets(),
             Ranges = RangeBox.Text,
@@ -152,22 +158,49 @@ public partial class MainWindow : Window
 
     // ---------------- 設定の読み取り ----------------
 
+    /// <summary>SDF出力でのサイズ×倍率の上限。N倍で描く面と距離変換の作業領域が大きくなりすぎないようにする</summary>
+    private const float MaxSdfScaledSize = 4096;
+
     /// <summary>UI の内容から RenderOptions を作る。不正な値なら例外(FormatException)</summary>
     private RenderOptions ReadOptions()
     {
+        // SDF出力では文字高と余白を全文字でそろえる約束なので、余白・切り抜きは使わない。
+        // 色も使わない(カラーの字形は透明背景の通常画像で出す)。無効にした欄は解析しない
+        bool sdf = SdfCheck.IsChecked == true;
+        float fontSize = ParseFloat(SizeBox.Text, "サイズ", 1, 2048);
+        int supersample = SelectedSupersample;
+        if (sdf && fontSize * supersample > MaxSdfScaledSize)
+            throw new FormatException($"SDFで出力するときは サイズ×倍率 を {MaxSdfScaledSize} 以下にしてください。");
         return new RenderOptions
         {
-            FontSize = ParseFloat(SizeBox.Text, "サイズ", 1, 2048),
-            Padding = ParseInt(PaddingBox.Text, "余白", 0, 1024),
+            FontSize = fontSize,
+            Padding = sdf ? 0 : ParseInt(PaddingBox.Text, "余白", 0, 1024),
             TrimTop = ParseInt(TrimTopBox.Text, "上トリム", 0, 1024),
             TrimBottom = ParseInt(TrimBottomBox.Text, "下トリム", 0, 1024),
-            TextColor = ParseColor(TextColorBox.Text, "文字色"),
-            BackgroundColor = TransparentCheck.IsChecked == true ? SKColors.Transparent : ParseColor(BgColorBox.Text, "背景色"),
-            TrimToInk = TrimInkCheck.IsChecked == true,
+            TextColor = sdf ? SKColors.White : ParseColor(TextColorBox.Text, "文字色"),
+            BackgroundColor = sdf || TransparentCheck.IsChecked == true ? SKColors.Transparent : ParseColor(BgColorBox.Text, "背景色"),
+            TrimToInk = !sdf && TrimInkCheck.IsChecked == true,
             Antialias = AntialiasCheck.IsChecked == true,
             SkipMissing = SkipMissingCheck.IsChecked == true,
             SkipBlank = SkipBlankCheck.IsChecked == true,
+            SdfOutput = sdf,
+            SdfSupersample = supersample,
         };
+    }
+
+    private IEnumerable<System.Windows.Controls.ComboBoxItem> SupersampleItems =>
+        SupersampleCombo.Items.OfType<System.Windows.Controls.ComboBoxItem>();
+
+    private int SelectedSupersample =>
+        int.Parse((string)((System.Windows.Controls.ComboBoxItem)SupersampleCombo.SelectedItem).Content, CultureInfo.InvariantCulture);
+
+    /// <summary>SDF出力では使わない欄を無効にする</summary>
+    private void UpdateSdfControls()
+    {
+        bool sdf = SdfCheck.IsChecked == true;
+        foreach (var c in new UIElement[] { TextColorBox, BgColorBox, TransparentCheck, PaddingBox, TrimInkCheck })
+            c.IsEnabled = !sdf;
+        SupersampleCombo.IsEnabled = sdf;
     }
 
     /// <summary>UI の内容からフォントを得る（同じ指定ならキャッシュを返す）</summary>
@@ -221,6 +254,7 @@ public partial class MainWindow : Window
     private void OnSettingChanged(object sender, RoutedEventArgs e)
     {
         if (!_ready) return;
+        UpdateSdfControls();
         UpdatePreview();
     }
 
@@ -454,6 +488,11 @@ public partial class MainWindow : Window
             Color = SKColors.Orange, Style = SKPaintStyle.Stroke, StrokeWidth = 3,
             PathEffect = SKPathEffect.CreateDash([6, 4], 0),
         };
+        using var sdfCell = new SKPaint
+        {
+            Color = new SKColor(0, 200, 255), Style = SKPaintStyle.Stroke, StrokeWidth = 1,
+            PathEffect = SKPathEffect.CreateDash([4, 3], 0),
+        };
         bool skipBlank = SkipBlankCheck.IsChecked == true;
 
         const float gap = 12;
@@ -462,7 +501,10 @@ public partial class MainWindow : Window
         foreach (var g in CharsetSource.FromText(PreviewTextBox.Text))
         {
             bool has = renderer.CanRender(g);
-            using var bmp = renderer.Render(g);
+            // SDF出力ではカラーの字形だけ通常の画像にする(出力と同じ)
+            bool sdfGlyph = options.SdfOutput && !(has && renderer.IsColorGlyph(g));
+            int sdfPadding = 0;
+            using var bmp = sdfGlyph ? renderer.RenderSdf(g, out sdfPadding) : renderer.Render(g);
             float w = bmp?.Width ?? options.FontSize / 2, h = bmp?.Height ?? options.FontSize;
 
             if (x + w > canvasWidth - gap && x > gap)
@@ -476,6 +518,11 @@ public partial class MainWindow : Window
             DrawChecker(canvas, rect);
             if (bmp is not null) { using var img = SKImage.FromBitmap(bmp); canvas.DrawImage(img, x, y, SKSamplingOptions.Default); }
             canvas.DrawRect(rect, frame);
+            if (sdfGlyph && bmp is not null)
+            {
+                // 余白の内側(セル)を点線で示す
+                canvas.DrawRect(SKRect.Create(x + sdfPadding, y + sdfPadding, w - sdfPadding * 2, h - sdfPadding * 2), sdfCell);
+            }
             if (!has)
             {
                 // フォントに無い文字は赤い×印
@@ -494,8 +541,12 @@ public partial class MainWindow : Window
             rowH = Math.Max(rowH, h);
         }
 
-        var metrics = new SKFont(typeface, options.FontSize).Metrics;
-        PreviewInfo.Text = $"フォント: {typeface.FamilyName}　セル高さ: {Math.Ceiling(metrics.Descent - metrics.Ascent) - options.TrimTop - options.TrimBottom}px"
+        int cellH = renderer.CellHeight;
+        PreviewInfo.Text = $"フォント: {typeface.FamilyName}　セル高さ: {cellH}px"
+            + (options.SdfOutput
+                ? $"　SDF: 余白 {SdfGenerator.Padding(cellH)}px・spread {SdfGenerator.Spread(cellH):0.##}px・倍率 {options.SdfSupersample}"
+                  + "　水色の点線 = セル（余白の内側）"
+                : "")
             + "　青枠 = 出力される画像の範囲"
             + (missingCount > 0 ? $"　赤× = フォントに無い文字 ({missingCount})" : "")
             + (blankCount > 0 ? $"　橙の点線 = 空白のため出力しない文字 ({blankCount})" : "")

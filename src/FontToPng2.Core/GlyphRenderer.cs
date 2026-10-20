@@ -11,6 +11,7 @@ namespace FontToPng2.Core;
 public sealed class GlyphRenderer : IDisposable
 {
     private readonly SKFont _font;
+    private readonly SKFont _sdfFont; // SDF用に N倍の大きさで描くフォント
     private readonly SKShaper _shaper;
     private readonly RenderOptions _options;
 
@@ -22,7 +23,26 @@ public sealed class GlyphRenderer : IDisposable
             Edging = options.Antialias ? SKFontEdging.Antialias : SKFontEdging.Alias,
             Subpixel = true,
         };
+        // ヒンティングは等倍と同じ(触らない)。変えると N=1 の出力が通常画像を SDF化したものと一致しなくなる
+        _sdfFont = new SKFont(typeface, options.FontSize * SdfSupersample)
+        {
+            Edging = _font.Edging,
+            Subpixel = true,
+        };
         _shaper = new SKShaper(typeface);
+    }
+
+    /// <summary>SDF済み画像を作るときの倍率</summary>
+    private int SdfSupersample => Math.Clamp(_options.SdfSupersample, 1, 8);
+
+    /// <summary>文字高 = セルの高さ(ascent〜descent から上下トリムを引いたもの。全文字で同じ)</summary>
+    public int CellHeight
+    {
+        get
+        {
+            var metrics = _font.Metrics;
+            return (int)Math.Ceiling(metrics.Descent - metrics.Ascent) - _options.TrimTop - _options.TrimBottom;
+        }
     }
 
     /// <summary>フォントがこの文字の字形を持っているか</summary>
@@ -44,7 +64,7 @@ public sealed class GlyphRenderer : IDisposable
         // セル = 送り幅 × (ascent〜descent)
         var metrics = _font.Metrics;
         int cellW = (int)Math.Ceiling(shaped.Width);
-        int cellH = (int)Math.Ceiling(metrics.Descent - metrics.Ascent) - _options.TrimTop - _options.TrimBottom;
+        int cellH = CellHeight;
         if (cellW <= 0 || cellH <= 0) return null;
 
         // 1) 透明なセルに文字だけを描く
@@ -67,6 +87,72 @@ public sealed class GlyphRenderer : IDisposable
             using var inkImage = SKImage.FromBitmap(ink);
             canvas.DrawImage(inkImage, pad - src.Left, pad - src.Top, SKSamplingOptions.Default);
         }
+        return output;
+    }
+
+    /// <summary>
+    /// 文字を SDF済み画像(Gray8。画素の値 = 境界からの符号付き距離)にする。
+    /// セルは Render() と同じで、その上下左右に余白 padding(全文字で同じ)を付ける。
+    /// 文字を N倍(SdfSupersample)の大きさで描いてから距離場にする。
+    /// null を返す条件は Render() と同じ。仕様: Yuka2/Document/SDF済み画像フォント仕様.md
+    /// </summary>
+    public SKBitmap? RenderSdf(string grapheme, out int padding)
+    {
+        int cellH = CellHeight;
+        padding = SdfGenerator.Padding(cellH);
+
+        var shaped = _shaper.Shape(grapheme, _font);
+        if (shaped.Codepoints.Length == 0) return null;
+        if (_options.SkipMissing && shaped.Codepoints.Any(g => g == 0)) return null;
+
+        var metrics = _font.Metrics;
+        int cellW = (int)Math.Ceiling(shaped.Width);
+        if (cellW <= 0 || cellH <= 0) return null;
+
+        float spread = SdfGenerator.Spread(cellH);
+        int p = padding;
+        int n = SdfSupersample;
+        int hiW = (cellW + p * 2) * n;
+        int hiH = (cellH + p * 2) * n;
+
+        // 1) N倍の透明な面へ白で描く。セルの範囲で切り抜いて通常の出力と同じ形にする
+        //    ベースラインは等倍のフォントの ascent × N(N倍のフォントの ascent だと通常の出力と位置がずれうる)
+        using var hi = new SKBitmap(new SKImageInfo(hiW, hiH, SKColorType.Rgba8888, SKAlphaType.Premul));
+        using (var canvas = new SKCanvas(hi))
+        using (var paint = new SKPaint { Color = SKColors.White, IsAntialias = _options.Antialias })
+        {
+            canvas.Clear(SKColors.Transparent);
+            canvas.ClipRect(SKRect.Create(p * n, p * n, cellW * n, cellH * n));
+            float baseline = (p + (-metrics.Ascent - _options.TrimTop)) * n;
+            canvas.DrawShapedText(_shaper, grapheme, p * n, baseline, SKTextAlign.Left, _sdfFont, paint);
+        }
+
+        // 2) α をカバレッジにする
+        var coverage = new byte[hiW * hiH];
+        var px = hi.GetPixelSpan();
+        int stride = hi.RowBytes;
+        bool hasInk = false;
+        for (int y = 0; y < hiH; y++)
+        {
+            int s = y * stride;
+            int d = y * hiW;
+            for (int x = 0; x < hiW; x++)
+            {
+                byte a = px[s + x * 4 + 3];
+                coverage[d + x] = a;
+                if (a != 0) hasInk = true;
+            }
+        }
+        if (_options.SkipBlank && !hasInk && !IsWhiteSpace(grapheme)) return null;
+
+        // 3) 距離値にして Gray8 の画像にする(幅が4の倍数でないと行の境目がずれるので RowBytes で1行ずつ写す)
+        var sdf = SdfGenerator.BuildFromCoverage(coverage, hiW, hiH, hiW, n, spread, out int ow, out int oh);
+        if (sdf is null) return null;
+        var output = new SKBitmap(new SKImageInfo(ow, oh, SKColorType.Gray8, SKAlphaType.Opaque));
+        var dst = output.GetPixelSpan();
+        int rowBytes = output.RowBytes;
+        for (int y = 0; y < oh; y++)
+            sdf.AsSpan(y * ow, ow).CopyTo(dst.Slice(y * rowBytes, ow));
         return output;
     }
 
@@ -147,6 +233,7 @@ public sealed class GlyphRenderer : IDisposable
     public void Dispose()
     {
         _shaper.Dispose();
+        _sdfFont.Dispose();
         _font.Dispose();
     }
 }
