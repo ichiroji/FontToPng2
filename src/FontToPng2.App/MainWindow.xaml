@@ -105,8 +105,7 @@
                         <!-- プリセットのチェックボックスはコードで生成する -->
                         <UniformGrid x:Name="PresetPanel" Columns="2"/>
                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                            <Button Content="旧版と同じ範囲" Padding="8,2" Click="OnSelectLegacyPresets"
-                                    ToolTip="絵文字以外の項目にチェックを付けます"/>
+                            <Button Content="すべて選択" Padding="8,2" Click="OnSelectAllPresets"/>
                             <Button Content="すべて解除" Padding="8,2" Margin="6,0,0,0" Click="OnClearPresets"/>
                         </StackPanel>
                         <TextBlock Text="その他の範囲（16進、例: 0400-04FF, U+1F600）" Margin="0,8,0,2" TextWrapping="Wrap"/>

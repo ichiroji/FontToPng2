@@ -333,7 +333,7 @@ public partial class MainWindow : Window
         return CharsetSource.Build(string.Join(", ", specs), ExtraTextBox.Text);
     }
 
-    private void OnSelectLegacyPresets(object sender, RoutedEventArgs e) => SetCheckedPresets(CharsetSource.LegacyPresetNames);
+    private void OnSelectAllPresets(object sender, RoutedEventArgs e) => SetCheckedPresets(CharsetSource.Presets.Select(p => p.Name));
 
     private void OnClearPresets(object sender, RoutedEventArgs e) => SetCheckedPresets([]);
 
