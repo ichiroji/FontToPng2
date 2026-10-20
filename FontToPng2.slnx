@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FontToPng2.App/FontToPng2.App.csproj" />
+    <Project Path="src/FontToPng2.Core/FontToPng2.Core.csproj" />
+  </Folder>
+</Solution>

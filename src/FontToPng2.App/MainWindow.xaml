@@ -1,0 +1,161 @@
+<Window x:Class="FontToPng2.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FontToPng2" Width="1000" Height="720" MinWidth="800" MinHeight="600"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Padding" Value="6"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="10">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="400"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 左：設定 -->
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Margin="0,0,10,0">
+            <StackPanel>
+                <GroupBox Header="フォント">
+                    <StackPanel>
+                        <RadioButton x:Name="SystemFontRadio" Content="インストール済みフォント" IsChecked="True" Checked="OnSettingChanged"/>
+                        <ComboBox x:Name="FamilyCombo" Margin="18,4,0,4" IsEditable="True" IsTextSearchEnabled="True"
+                                  SelectionChanged="OnSettingChanged" LostFocus="OnSettingChanged"/>
+                        <StackPanel Orientation="Horizontal" Margin="18,0,0,6">
+                            <CheckBox x:Name="BoldCheck" Content="太字" Margin="0,0,12,0" Click="OnSettingChanged"/>
+                            <CheckBox x:Name="ItalicCheck" Content="斜体" Click="OnSettingChanged"/>
+                        </StackPanel>
+                        <RadioButton x:Name="FileFontRadio" Content="フォントファイル (TTF / OTF / TTC)" Checked="OnSettingChanged"/>
+                        <DockPanel Margin="18,4,0,0">
+                            <Button DockPanel.Dock="Right" Content="参照..." Padding="8,2" Click="OnBrowseFont"/>
+                            <TextBlock DockPanel.Dock="Right" Text="TTC番号" Style="{StaticResource Label}" Margin="6,0,4,0"/>
+                            <TextBox x:Name="FontIndexBox" DockPanel.Dock="Right" Width="32" Text="0" Margin="0,0,6,0" LostFocus="OnSettingChanged"/>
+                            <TextBox x:Name="FontPathBox" IsReadOnly="True"/>
+                        </DockPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="描画">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="サイズ(px)" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="SizeBox" Grid.Column="1" Text="64" Margin="0,2,10,2" LostFocus="OnSettingChanged"/>
+                        <TextBlock Grid.Column="2" Text="余白(px)" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="PaddingBox" Grid.Column="3" Text="0" Margin="0,2" LostFocus="OnSettingChanged"/>
+
+                        <TextBlock Grid.Row="1" Text="上トリム" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="TrimTopBox" Grid.Row="1" Grid.Column="1" Text="0" Margin="0,2,10,2" LostFocus="OnSettingChanged"/>
+                        <TextBlock Grid.Row="1" Grid.Column="2" Text="下トリム" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="TrimBottomBox" Grid.Row="1" Grid.Column="3" Text="0" Margin="0,2" LostFocus="OnSettingChanged"/>
+
+                        <TextBlock Grid.Row="2" Text="文字色" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="TextColorBox" Grid.Row="2" Grid.Column="1" Text="#FFFFFF" Margin="0,2,10,2" LostFocus="OnSettingChanged"/>
+                        <TextBlock Grid.Row="2" Grid.Column="2" Text="背景色" Style="{StaticResource Label}"/>
+                        <TextBox x:Name="BgColorBox" Grid.Row="2" Grid.Column="3" Text="#000000" Margin="0,2" LostFocus="OnSettingChanged"/>
+
+                        <CheckBox x:Name="TransparentCheck" Grid.Row="3" Grid.ColumnSpan="4" Content="背景を透明にする（オフで背景色を塗る）"
+                                  IsChecked="True" Margin="0,6,0,2" Click="OnSettingChanged"/>
+                        <WrapPanel Grid.Row="4" Grid.ColumnSpan="4" Margin="0,2">
+                            <CheckBox x:Name="TrimInkCheck" Content="文字の形に合わせて切り抜く" Margin="0,0,12,0" Click="OnSettingChanged"/>
+                            <CheckBox x:Name="AntialiasCheck" Content="アンチエイリアス" IsChecked="True" Margin="0,0,12,0" Click="OnSettingChanged"/>
+                            <CheckBox x:Name="SkipMissingCheck" Content="フォントに無い文字は出力しない" IsChecked="True" Margin="0,0,12,0" Click="OnSettingChanged"/>
+                            <CheckBox x:Name="SkipBlankCheck" Content="空白になる文字は出力しない（スペース等は除く）" IsChecked="True" Click="OnSettingChanged"/>
+                        </WrapPanel>
+                    </Grid>
+                </GroupBox>
+
+                <GroupBox Header="出力する文字">
+                    <StackPanel>
+                        <!-- プリセットのチェックボックスはコードで生成する -->
+                        <UniformGrid x:Name="PresetPanel" Columns="2"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <Button Content="旧版と同じ範囲" Padding="8,2" Click="OnSelectLegacyPresets"
+                                    ToolTip="絵文字以外の項目にチェックを付けます"/>
+                            <Button Content="すべて解除" Padding="8,2" Margin="6,0,0,0" Click="OnClearPresets"/>
+                        </StackPanel>
+                        <TextBlock Text="その他の範囲（16進、例: 0400-04FF, U+1F600）" Margin="0,8,0,2" TextWrapping="Wrap"/>
+                        <TextBox x:Name="RangeBox" Height="44" AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" TextChanged="OnCharsetChanged"/>
+                        <DockPanel Margin="0,6,0,2">
+                            <Button DockPanel.Dock="Right" Content="テキストファイル読込..." Padding="8,2" Click="OnLoadTextFile"
+                                    ToolTip="選んだファイルの文字を追記します（重複は除去、文字コードは自動判別）"/>
+                            <TextBlock Text="文字を直接指定（絵文字の組み合わせもOK）" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <TextBox x:Name="ExtraTextBox" Height="70" AcceptsReturn="True" TextWrapping="Wrap"
+                                 VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" TextChanged="OnCharsetChanged"/>
+                        <TextBlock x:Name="CharCountText" Margin="0,4,0,0" Foreground="Gray"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="出力">
+                    <StackPanel>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="参照..." Padding="8,2" Margin="6,0,0,0" Click="OnBrowseOutput"/>
+                            <TextBox x:Name="OutputDirBox"/>
+                        </DockPanel>
+                        <TextBlock Text="ファイル名はコードポイント（例: 20.png、3042.png、1f468-200d-1f469.png）" Foreground="Gray" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="一覧CSVのファイル名" Style="{StaticResource Label}"/>
+                            <TextBox x:Name="CsvNameBox" Grid.Column="1" Text="FontList.csv" Margin="0,2"/>
+                            <TextBlock Grid.Row="1" Text="ファイル名の前に付ける文字" Style="{StaticResource Label}"/>
+                            <TextBox x:Name="CsvPrefixBox" Grid.Row="1" Grid.Column="1" Margin="0,2"/>
+                        </Grid>
+                        <TextBlock Foreground="Gray" Margin="0,4,0,0" TextWrapping="Wrap"
+                                   Text="CSVの1行: 文字コード番号,ファイル名[,1]（1 = カラーの字形）。例: 0x20,FONT\20.png　ファイル名を空にするとCSVは作りません"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="StartButton" Content="作成開始" Padding="20,6" Click="OnStart"/>
+                    <Button x:Name="CancelButton" Content="キャンセル" Padding="12,6" Margin="8,0,0,0" IsEnabled="False" Click="OnCancel"/>
+                    <Button Content="設定を初期値に戻す" Padding="10,6" Margin="24,0,0,0" Click="OnResetSettings"/>
+                </StackPanel>
+                <ProgressBar x:Name="Progress" Height="16" Margin="0,8,0,0"/>
+                <TextBlock x:Name="StatusText" Margin="0,4,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- 右：プレビュー -->
+        <DockPanel Grid.Column="1">
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                <TextBlock Text="プレビュー文字" Style="{StaticResource Label}"/>
+                <TextBox x:Name="PreviewTextBox" Text="Aあ漢字😀👨‍👩‍👧🇯🇵" TextChanged="OnSettingChanged"/>
+            </DockPanel>
+            <TextBlock DockPanel.Dock="Bottom" x:Name="PreviewInfo" Foreground="Gray" Margin="0,4,0,0" TextWrapping="Wrap"/>
+            <Border x:Name="PreviewHost" BorderBrush="LightGray" BorderThickness="1" Background="White" SizeChanged="OnPreviewSizeChanged">
+                <Image x:Name="PreviewImage" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+            </Border>
+        </DockPanel>
+    </Grid>
+</Window>
